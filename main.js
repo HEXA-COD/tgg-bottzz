@@ -135,8 +135,12 @@ const isAdmin = await isUserAdmin(bot, chatId, userId);
 
 }
 
-bot.onText(new RegExp(^${config.prefix}(\\S*), 'i'), (msg, match) => { const cmd = match[1].toLowerCase(); if (!commands.some(c => c.config.name === cmd)) { bot.sendMessage(msg.chat.id, ❌ Command not found. Try ${config.prefix}help); } });
-
+bot.onText(new RegExp(`^${config.prefix}(\\S*)`, 'i'), (msg, match) => {
+  const cmd = match[1].toLowerCase();
+  if (!commands.some(c => c.config.name === cmd)) {
+    bot.sendMessage(msg.chat.id, `❌ Command not found. Try ${config.prefix}help`);
+  }
+});
 bot.on('message', (msg) => { const chatId = msg.chat.id; const userId = msg.from.id; const text = msg.text?.toLowerCase(); if (!text) return; const isCommand = text.startsWith(config.prefix.toLowerCase()); const isTest = text === 'xass test'; if (!isCommand && !isTest) return;
 
 console.log(`[CMD] ${msg.chat.type} | ${userId}: ${text}`);
