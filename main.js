@@ -1,25 +1,93 @@
-const TelegramBot = require('node-telegram-bot-api'); const config = require('./config.json'); const fs = require('fs'); const path = require('path'); const cron = require('node-cron'); const axios = require('axios'); const gradient = require('gradient-string');
+const TelegramBot = require('node-telegram-bot-api');
+const config = require('./config.json');
+const fs = require('fs');
+const path = require('path');
+const cron = require('node-cron');
+const axios = require('axios');
+const gradient = require('gradient-string');
 
-const chatGroupsFile = path.join(__dirname, 'chatGroups.json'); const messageCountFile = path.join(__dirname, 'messageCount.json'); const VERSION_FILE = path.join(__dirname, 'version.txt');
+// File paths
+const chatGroupsFile = path.join(__dirname, 'chatGroups.json');
+const messageCountFile = path.join(__dirname, 'messageCount.json');
+const VERSION_FILE = path.join(__dirname, 'version.txt');
 
-if (!fs.existsSync(messageCountFile)) fs.writeFileSync(messageCountFile, JSON.stringify({}), 'utf8'); if (!fs.existsSync(chatGroupsFile)) fs.writeFileSync(chatGroupsFile, JSON.stringify([]), 'utf8');
+// Ensure necessary files exist
+if (!fs.existsSync(messageCountFile)) {
+  fs.writeFileSync(messageCountFile, JSON.stringify({}), 'utf8');
+}
+if (!fs.existsSync(chatGroupsFile)) {
+  fs.writeFileSync(chatGroupsFile, JSON.stringify([]), 'utf8');
+}
 
-let chatGroups = JSON.parse(fs.readFileSync(chatGroupsFile, 'utf8')); let gbanList = []; let lastCommitSha = null; const cooldowns = new Map(); const commands = []; let adminOnlyMode = false;
+// Load data
+let chatGroups = JSON.parse(fs.readFileSync(chatGroupsFile, 'utf8'));
+let gbanList = [];
+let lastCommitSha = null;
+const cooldowns = new Map();
+const commands = [];
+let adminOnlyMode = false;
 
-function createGradientLogger() { const colors = ['blue', 'cyan']; return (message) => { const colorIndex = Math.floor(Math.random() * colors.length); const color1 = colors[colorIndex]; const color2 = colors[(colorIndex + 1) % colors.length]; console.log(gradient(color1, color2)(message)); }; } const logger = createGradientLogger();
+// Create colorful console logger
+function createGradientLogger() {
+  const colors = ['blue', 'cyan'];
+  return (message) => {
+    const color1 = colors[Math.floor(Math.random() * colors.length)];
+    const color2 = colors[(colors.indexOf(color1) + 1) % colors.length];
+    console.log(gradient(color1, color2)(message));
+  };
+}
+const logger = createGradientLogger();
 
-const bot = new TelegramBot(config.token, { polling: true }); logger("\n🤖 XASS Bot by BaYjid 🔥\n"); bot.on('polling_started', () => logger('✅ Bot polling started')); bot.on('polling_error', (error) => logger('[Polling Error] ' + error.message));
+// Start bot
+const bot = new TelegramBot(config.token, { polling: true });
+logger("\n🤖 XASS Bot by BaYjid 🔥\n");
+bot.on('polling_started', () => logger('✅ Bot polling started'));
+bot.on('polling_error', (error) => logger('[Polling Error] ' + error.message));
 
-async function fetchGbanList() { try { const res = await axios.get('https://raw.githubusercontent.com/BAYJID-403/Gban/refs/heads/main/gban.json'); gbanList = res.data.map(user => user.ID); } catch (err) { logger('[GBAN Fetch Error] ' + err.message); } } fetchGbanList(); cron.schedule('*/1 * * * *', fetchGbanList);
+// Fetch gban list
+async function fetchGbanList() {
+  try {
+    const res = await axios.get('https://raw.githubusercontent.com/BAYJID-403/Gban/refs/heads/main/gban.json');
+    gbanList = res.data.map(user => user.ID);
+  } catch (err) {
+    logger('[GBAN Fetch Error] ' + err.message);
+  }
+}
+fetchGbanList();
+cron.schedule('*/1 * * * *', fetchGbanList);
 
-fs.readdirSync('./scripts/cmds').forEach((file) => { if (file.endsWith('.js')) { try { const command = require(./scripts/cmds/${file}); command.config.role ??= 0; command.config.cooldown ??= 0; commands.push({ ...command, config: { ...command.config, name: command.config.name.toLowerCase() } }); registerCommand(bot, command); } catch (err) { console.error(❌ Error loading ${file}:, err.message); } } });
+// Load and register commands
+fs.readdirSync('./scripts/cmds').forEach((file) => {
+  if (file.endsWith('.js')) {
+    try {
+      const command = require(`./scripts/cmds/${file}`);
+      command.config.role ??= 0;
+      command.config.cooldown ??= 0;
 
-function registerCommand(bot, command) { const pattern = command.config.usePrefix ? ^${config.prefix}${command.config.name}\\b(.*)$ : ^${command.config.name}\\b(.*)$;
+      commands.push({
+        ...command,
+        config: {
+          ...command.config,
+          name: command.config.name.toLowerCase()
+        }
+      });
 
-bot.onText(new RegExp(pattern, 'i'), (msg, match) => {
-    executeCommand(bot, command, msg, match);
+      registerCommand(bot, command);
+    } catch (err) {
+      console.error(`❌ Error loading ${file}:`, err.message);
+    }
+  }
 });
 
+// Register a command to the bot
+function registerCommand(bot, command) {
+  const pattern = command.config.usePrefix
+    ? new RegExp(`^${config.prefix}${command.config.name}\\b(.*)$`, 'i')
+    : new RegExp(`^${command.config.name}\\b(.*)$`, 'i');
+
+  bot.onText(pattern, (msg, match) => {
+    executeCommand(bot, command, msg, match);
+  });
 }
 
 async function isUserAdmin(bot, chatId, userId) { try { const admins = await bot.getChatAdministrators(chatId); return admins.some(admin => admin.user.id === userId); } catch { return false; } }
